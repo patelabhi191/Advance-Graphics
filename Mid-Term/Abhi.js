@@ -4,9 +4,9 @@ const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerH
 
 var orbitControls, controls,
     speed = 0.01,
-    toRotate = true,
-    armLenght = 10, bodyLenght, numberOfArms, armInclination = 0.25;
+    toRotate = true;
 
+let spotlight, armMaterial, towerMaterial, arms;
 
 function init() {
 
@@ -18,7 +18,6 @@ function init() {
     document.body.appendChild(renderer.domElement);
     orbitControls = new THREE.OrbitControls(camera, renderer.domElement);
 
-    
 }
 
 function setupCameraAndLight() {
@@ -45,87 +44,78 @@ function setupCameraAndLight() {
     hemiSphereLight.position.set(0, 100, 0);
     scene.add(hemiSphereLight);
 
-    spotLight = new THREE.SpotLight( 0xffffff );
-    spotLight.position.set( 100, 1000, 100 );
-
-    spotLight.castShadow = true;
-
-    spotLight.shadow.mapSize.width = 1024;
-    spotLight.shadow.mapSize.height = 1024;
-
-    spotLight.shadow.camera.near = 500;
-    spotLight.shadow.camera.far = 4000;
-    spotLight.shadow.camera.fov = 30;
-
-    scene.add( spotLight );
+    spotlight = new THREE.SpotLight(0xaaaaaa,2);
+    spotlight.position.set(0, 10, 20);
+    spotlight.lookAt(scene.position);
+    spotlight.castShadow = true;
+    scene.add(spotlight);
 }
 
 function createGeometry() {
 
     scene.add(new THREE.AxesHelper(100));
     let plane = new THREE.Mesh(
-        new THREE.PlaneGeometry(100, 60),
+        new THREE.PlaneGeometry(40, 60),
         new THREE.MeshLambertMaterial({ color: 0xeeeeee })
     );
     plane.receiveShadow = true;
-    plane.position.y = -20;
     plane.rotation.x = -Math.PI * 0.5;
     scene.add(plane);
 
-    
+
 
 }
+function createWindmillMaterials() {
 
-function createWindmillMaterials(armLenght, bodyLenght, numberOfArms, armInclination) {
+    armMaterial = new THREE.MeshLambertMaterial({
+        color: 0x4c7be8,
+        opacity: 0.8,
+        transparent: true,
+        wireframe: false
+    });
 
-    var geometry = new THREE.CylinderGeometry( 5, 7, 20, 32 );
-    var material = new THREE.MeshStandardMaterial( {color: 0xff0000} );
-    var tower = new THREE.Mesh( geometry, material );
-    tower.position.y = -10;
-    tower.position.x = -7;
-    scene.add( tower );
+    towerMaterial = new THREE.MeshStandardMaterial({
+        color: 0xff0000,
+        metalness: 0.6
+    });
+}
 
-    var geo = new THREE.CylinderGeometry( 1, 1, 5, 32 );
-    var mat = new THREE.MeshStandardMaterial( {color: 0xff0000} );
-     axle = new THREE.Mesh( geo, mat );
-   // axle.position.y = -1.5;
-    axle.position.x = -1;
-    axle.rotation.z =1.57;
-    scene.add( axle );
+function createWindmill(armlength, towerHeight, numberOfArms, armIncline = 0.25) {
 
+    let windmill = new THREE.Object3D();             //creates an empty container
 
-    var geometry1 = new THREE.BoxGeometry( 10, 5, 1 );
-    var material1 = new THREE.MeshLambertMaterial( {color: 0x00ff00} );
-    var arm1 = new THREE.Mesh( geometry1, material1 );
-  //  arm1.position.x = 20;
-    arm1.rotation.z = 1.57;
-    arm1.rotation.y = 1.57;
-    scene.add( arm1 );
-    
+    arms = new THREE.Object3D();                        //creates an empty container
 
-    var arm2 = arm1.clone();
-    arm2.rotation.x = 2.65;
-    scene.add(arm2);
+    let geom = new THREE.BoxGeometry( 4, armlength, 0.2 );
+    geom.translate( 0, armlength * 0.5, 3 );            //change the origin for rotation later
+    geom.rotateY(armIncline);
+    let arm = new THREE.Mesh(geom, armMaterial);
+    arm.castShadow = true;
+    arms.add(arm);
 
-    var arm3 = arm1.clone();
-    arm3.rotation.x = -2.65;
-    scene.add(arm3);
+    let angle = Math.PI * 2 / numberOfArms;             //arm angle
+    for (let i = 1; i < numberOfArms; i++) {
 
-   arm1.position.set(0,5,0);
-   arm2.position.set(0,-4,-5);
-   arm3.position.set(0,-4,5);
+        let clone = arm.clone();
+        clone.rotation.z = angle * i;
+        arms.add(clone);
+    }
 
-   arm = new THREE.Object3D();
-   arm.add(axle);
-   arm.add(arm1);
-   arm.add(arm2);
-   arm.add(arm3);
-   arm.position.set(0,0,0);
-   scene.add(arm);
-   
-    
+    let axleLength = 4;
+    geom = new THREE.CylinderGeometry(0.5, 0.5, axleLength, 24, 1);
+    geom.translate(0, axleLength * 0.5, 0);
+    let axle = new THREE.Mesh(geom, towerMaterial);
+    axle.rotation.x = Math.PI / 2;
+    arms.add(axle);
+    arms.position.set(0, towerHeight * 0.5 - 1, 1.8);
+    windmill.add(arms);
 
+    let tower = new THREE.Mesh(new THREE.CylinderGeometry(2, 4, towerHeight, 24, 1), towerMaterial);
+    tower.castShadow = true;
+    tower.receiveShadow = true;
+    windmill.add(tower);
 
+    return windmill;
 }
 
 function setupDatGui() {
@@ -133,32 +123,61 @@ function setupDatGui() {
     controls = new function() {
 
         this.rotate = toRotate;
-        this.spotLight = true;
+        this.rotationSpeed = 0.01;
+        this.armColor = armMaterial.color.getStyle();
+        this.armVisible = armMaterial.visible;
+        this.towerColor = towerMaterial.color.getStyle();
+        this.towerVisible = towerMaterial.visible;
+        this.enableSpotlight = function () { spotlight.visible = !spotlight.visible };
+        this.armLength = 16
+        this.towerHeight = 22;
+        this.numberOfArms = 3;
+        this.createObject = () => {
+            let windmill = createWindmill(
+                this.armLength,             //armLength
+                this.towerHeight,            //tower Height
+                this.numberOfArms);              //number of arms
+            
+            windmill.position.set(0, 11, 0);
+            scene.add(windmill);
+
+
+            let hovercraft = createHovercraft(
+                this.armLength,             //armLength
+                this.bodyLength,            //body length
+                this.numberOfArms);              //number of arms
+            hovercraft.position.set(0, 11, 0);
+            scene.add(hovercraft);
+        }
     }
 
     let gui = new dat.GUI();
     gui.add(controls, 'rotate').onChange((e) => toRotate = e);
-    gui.add(controls, 'spotLight').listen().onChange((e) => {
-        spotLight.visible = e;});
-    //let upperFolder = gui.addFolder('Upper arm');
-    //upperFolder.add(controls, 'upperRotationX', -Math.PI * 0.5, Math.PI * 0.5);
-    //upperFolder.add(controls, 'upperRotationY', -Math.PI * 0.5, Math.PI * 0.5);
-    //upperFolder.add(controls, 'upperRotationZ', -Math.PI * 0.5, Math.PI * 0.5);
+    gui.add(controls, 'enableSpotlight');
+    gui.addColor(controls, 'armColor').onChange(function (e) { armMaterial.color.setStyle(e) }).name('Arm color');
+    gui.add(controls, 'armVisible').onChange(function (e) { armMaterial.visible = e; }).name('Arm visibility');
+    gui.addColor(controls, 'towerColor').onChange(function (e) { towerMaterial.color.setStyle(e) }).name('Tower color');
+    gui.add(controls, 'towerVisible').onChange(function (e) { towerMaterial.visible = e; }).name('Tower visibility');
+    gui.add(controls, 'rotationSpeed', 0, 0.4);
 
-    
-    //gui.add(controls, 'stop').name('Stop rotation').onChange((stop) => speed = !stop ? 0.01 : 0);
+    let folder = gui.addFolder('Windmill');
 
+    folder.add(controls, 'armLength', 12, 18, 2).name('Arm Length');
+    folder.add(controls, 'numberOfArms', 2, 10, 1).name('Number of Arms');
+    folder.add(controls, 'towerHeight', 18, 27, 3).name('Tower height');
+    folder.add(controls, 'createObject').name('Create');
 }
 
 function render() {
 
     orbitControls.update();
     if (toRotate)
-        scene.rotation.y += speed;//rotates the scene  
-
-    arm.rotation.x += 0.02; 
+        scene.rotation.y += controls.rotationSpeed;//rotates the scene  
+    if (arms !== undefined)
+        arms.rotation.z += controls.rotationSpeed;
     renderer.render(scene, camera);
     requestAnimationFrame(render);
+
 }
 
 window.onload = () => {
